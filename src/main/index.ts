@@ -132,6 +132,7 @@ import {
   getWorkspaceDocument,
   openWorkspaceDocument,
   deleteWorkspaceDocument,
+  startExternalFileWatcher,
 } from "./workspace";
 import {
   listBoards as kanbanListBoards,
@@ -1478,6 +1479,7 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   setupUpdater();
+  startExternalFileWatcher();
 
   // Auto-start SSH tunnel if configured
   const conn = getConnectionConfig();

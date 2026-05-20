@@ -188,6 +188,14 @@ export function Workspace({
     void loadDocuments();
   }, [loadDocuments]);
 
+  // Listen for workspace changes from file watcher
+  useEffect(() => {
+    const cleanup = window.hermesAPI.onWorkspaceChanged(() => {
+      void loadDocuments();
+    });
+    return cleanup;
+  }, [loadDocuments]);
+
   const handlePreview = useCallback((doc: WorkspaceDocument): void => {
     setSelectedDoc(doc);
   }, []);

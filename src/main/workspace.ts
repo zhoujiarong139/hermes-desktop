@@ -1,6 +1,7 @@
 import { app, shell } from "electron";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "fs";
+import { watch, FSWatcher } from "fs";
 
 interface WorkspaceDocument {
   id: string;
@@ -9,7 +10,11 @@ interface WorkspaceDocument {
   size: number;
   createdAt: number;
   path: string;
+  base64Data?: string;
+  isExternal?: boolean;
 }
+
+let fileWatcher: FSWatcher | null = null;
 
 function getWorkspacePath(): string {
   const userDataPath = app.getPath("userData");
@@ -20,8 +25,58 @@ function getWorkspacePath(): string {
   return workspacePath;
 }
 
+function getMonitoredDir(): string {
+  // Default monitored directory
+  return "/root/workspace";
+}
+
 function generateId(): string {
   return `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function scanExternalDir(dirPath: string): WorkspaceDocument[] {
+  const documents: WorkspaceDocument[] = [];
+
+  if (!existsSync(dirPath)) {
+    return documents;
+  }
+
+  try {
+    const files = readdirSync(dirPath);
+    for (const file of files) {
+      const filePath = join(dirPath, file);
+      try {
+        const stat = statSync(filePath);
+        if (stat.isFile()) {
+          const ext = file.split(".").pop()?.toLowerCase() || "";
+          const SUPPORTED_EXTS = [
+            "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico",
+            "mp4", "webm", "ogg", "mov", "avi", "m4v",
+            "pdf", "md", "txt", "html", "htm",
+            "ppt", "pptx", "doc", "docx", "xls", "xlsx",
+          ];
+
+          if (SUPPORTED_EXTS.includes(ext)) {
+            documents.push({
+              id: `ext-${file}`,
+              name: file,
+              type: ext,
+              size: stat.size,
+              createdAt: Math.floor(stat.mtimeMs / 1000),
+              path: filePath,
+              isExternal: true,
+            });
+          }
+        }
+      } catch {
+        // Skip files we can't stat
+      }
+    }
+  } catch {
+    // Directory doesn't exist or can't be read
+  }
+
+  return documents;
 }
 
 export async function listWorkspaceDocuments(): Promise<WorkspaceDocument[]> {
@@ -39,11 +94,16 @@ export async function listWorkspaceDocuments(): Promise<WorkspaceDocument[]> {
   }
 
   // Filter out documents whose files no longer exist
-  const validDocs = documents.filter((doc) => {
+  const validInternalDocs = documents.filter((doc) => {
     return existsSync(doc.path);
   });
 
-  return validDocs;
+  // Scan external monitored directory
+  const externalDir = getMonitoredDir();
+  const externalDocs = scanExternalDir(externalDir);
+
+  // Combine internal and external documents
+  return [...validInternalDocs, ...externalDocs];
 }
 
 export async function saveWorkspaceDocument(
@@ -95,23 +155,30 @@ export async function getWorkspaceDocument(
   name: string,
 ): Promise<string | null> {
   try {
+    // First check internal workspace
     const workspacePath = getWorkspacePath();
     const metadataPath = join(workspacePath, "metadata.json");
 
-    if (!existsSync(metadataPath)) {
-      return null;
+    if (existsSync(metadataPath)) {
+      const content = readFileSync(metadataPath, "utf-8");
+      const documents: WorkspaceDocument[] = JSON.parse(content);
+      const doc = documents.find((d) => d.name === name);
+
+      if (doc && existsSync(doc.path)) {
+        const fileContent = readFileSync(doc.path);
+        return fileContent.toString("base64");
+      }
     }
 
-    const content = readFileSync(metadataPath, "utf-8");
-    const documents: WorkspaceDocument[] = JSON.parse(content);
-    const doc = documents.find((d) => d.name === name);
-
-    if (!doc || !existsSync(doc.path)) {
-      return null;
+    // Then check external monitored directory
+    const externalDir = getMonitoredDir();
+    const externalPath = join(externalDir, name);
+    if (existsSync(externalPath)) {
+      const fileContent = readFileSync(externalPath);
+      return fileContent.toString("base64");
     }
 
-    const fileContent = readFileSync(doc.path);
-    return fileContent.toString("base64");
+    return null;
   } catch {
     return null;
   }
@@ -123,20 +190,33 @@ export async function openWorkspaceDocument(
   try {
     const workspacePath = getWorkspacePath();
     const metadataPath = join(workspacePath, "metadata.json");
+    let foundPath: string | null = null;
 
-    if (!existsSync(metadataPath)) {
-      return { success: false, error: "No documents found" };
+    // First check internal workspace
+    if (existsSync(metadataPath)) {
+      const content = readFileSync(metadataPath, "utf-8");
+      const documents: WorkspaceDocument[] = JSON.parse(content);
+      const doc = documents.find((d) => d.name === name);
+
+      if (doc && existsSync(doc.path)) {
+        foundPath = doc.path;
+      }
     }
 
-    const content = readFileSync(metadataPath, "utf-8");
-    const documents: WorkspaceDocument[] = JSON.parse(content);
-    const doc = documents.find((d) => d.name === name);
+    // Then check external monitored directory
+    if (!foundPath) {
+      const externalDir = getMonitoredDir();
+      const externalPath = join(externalDir, name);
+      if (existsSync(externalPath)) {
+        foundPath = externalPath;
+      }
+    }
 
-    if (!doc || !existsSync(doc.path)) {
+    if (!foundPath) {
       return { success: false, error: "Document not found" };
     }
 
-    await shell.openPath(doc.path);
+    await shell.openPath(foundPath);
     return { success: true };
   } catch (err) {
     return {
@@ -197,4 +277,55 @@ export async function addAsset(
       error: err instanceof Error ? err.message : "Failed to add asset",
     };
   }
+}
+
+// Trigger a workspace refresh notification to all windows
+export function notifyWorkspaceChanged(): void {
+  const { BrowserWindow } = require("electron");
+  BrowserWindow.getAllWindows().forEach((win: Electron.BrowserWindow) => {
+    win.webContents.send("workspace-changed");
+  });
+}
+
+// Start watching the external directory for changes
+export function startExternalFileWatcher(
+  onChange?: () => void,
+): void {
+  const externalDir = getMonitoredDir();
+
+  if (!existsSync(externalDir)) {
+    console.log(`External workspace directory does not exist: ${externalDir}`);
+    return;
+  }
+
+  // Stop existing watcher if any
+  stopExternalFileWatcher();
+
+  try {
+    fileWatcher = watch(externalDir, { recursive: false }, (eventType, filename) => {
+      if (filename) {
+        console.log(`File ${eventType}: ${filename}`);
+        onChange?.();
+        notifyWorkspaceChanged();
+      }
+    });
+
+    console.log(`Started watching external directory: ${externalDir}`);
+  } catch (err) {
+    console.error(`Failed to start file watcher: ${err}`);
+  }
+}
+
+// Stop watching the external directory
+export function stopExternalFileWatcher(): void {
+  if (fileWatcher) {
+    fileWatcher.close();
+    fileWatcher = null;
+    console.log("Stopped watching external directory");
+  }
+}
+
+// Get the monitored directory path
+export function getMonitoredDirPath(): string {
+  return getMonitoredDir();
 }

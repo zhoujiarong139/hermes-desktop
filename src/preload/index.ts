@@ -863,6 +863,12 @@ const hermesAPI = {
 
   deleteWorkspaceDocument: (name: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("delete-workspace-document", name),
+
+  onWorkspaceChanged: (callback: () => void): (() => void) => {
+    const handler = (): void => callback();
+    ipcRenderer.on("workspace-changed", handler);
+    return () => ipcRenderer.removeListener("workspace-changed", handler);
+  },
 };
 
 if (process.contextIsolated) {

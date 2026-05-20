@@ -686,6 +686,7 @@ interface HermesAPI {
   getWorkspaceDocument: (name: string) => Promise<string | null>;
   openWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
+  onWorkspaceChanged: (callback: () => void) => () => void;
 }
 
 declare global {
