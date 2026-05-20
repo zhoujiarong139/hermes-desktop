@@ -666,6 +666,26 @@ interface HermesAPI {
     name: string,
     sessionId: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  addAsset: (name: string, base64Data: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Workspace
+  listWorkspaceDocuments: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      size: number;
+      createdAt: number;
+      path: string;
+    }>
+  >;
+  saveWorkspaceDocument: (
+    name: string,
+    base64Data: string,
+  ) => Promise<{ success: boolean; id?: string; path?: string; error?: string }>;
+  getWorkspaceDocument: (name: string) => Promise<string | null>;
+  openWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
+  deleteWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useI18n } from "../../components/useI18n";
 import { WorkspacePreview } from "./WorkspacePreview";
 
@@ -164,8 +164,7 @@ export function Workspace({
   width = 320,
   collapsed = false,
   onToggle,
-  onWidthChange,
-  profile,
+  profile: _profile,
 }: WorkspaceProps): React.JSX.Element {
   const { t } = useI18n();
   const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);

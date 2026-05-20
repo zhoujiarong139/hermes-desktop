@@ -1,6 +1,6 @@
 import { app, shell } from "electron";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 
 interface WorkspaceDocument {
   id: string;

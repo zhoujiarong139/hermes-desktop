@@ -1,6 +1,6 @@
 import { app } from "electron";
 import { join } from "path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
 
 interface Asset {
