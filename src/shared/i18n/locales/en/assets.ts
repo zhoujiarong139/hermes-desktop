@@ -1,0 +1,16 @@
+export default {
+  title: "Assets",
+  search: "Search assets...",
+  today: "Today",
+  yesterday: "Yesterday",
+  thisWeek: "This Week",
+  earlier: "Earlier",
+  empty: "No assets yet",
+  emptyHint: "Files from task output can be saved as assets",
+  noMatch: "No assets match your search",
+  download: "Download",
+  remove: "Remove",
+  pushToChat: "Push to chat",
+  copyToWorkspace: "Copy to workspace",
+  openWithApp: "Open with app",
+} as const;

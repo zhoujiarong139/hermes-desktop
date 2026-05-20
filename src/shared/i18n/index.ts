@@ -26,6 +26,8 @@ import soulEn from "./locales/en/soul";
 import memoryEn from "./locales/en/memory";
 import installEn from "./locales/en/install";
 import constantsEn from "./locales/en/constants";
+import assetsEn from "./locales/en/assets";
+import workspaceEn from "./locales/en/workspace";
 import commonEs from "./locales/es/common";
 import navigationEs from "./locales/es/navigation";
 import welcomeEs from "./locales/es/welcome";
@@ -86,6 +88,8 @@ import soulZh from "./locales/zh-CN/soul";
 import memoryZh from "./locales/zh-CN/memory";
 import installZh from "./locales/zh-CN/install";
 import constantsZh from "./locales/zh-CN/constants";
+import assetsZh from "./locales/zh-CN/assets";
+import workspaceZh from "./locales/zh-CN/workspace";
 import commonZhTw from "./locales/zh-TW/common";
 import navigationZhTw from "./locales/zh-TW/navigation";
 import welcomeZhTw from "./locales/zh-TW/welcome";
@@ -170,6 +174,8 @@ export const resources = {
       memory: memoryEn,
       install: installEn,
       constants: constantsEn,
+      assets: assetsEn,
+      workspace: workspaceEn,
     },
   },
   es: {
@@ -242,6 +248,8 @@ export const resources = {
       memory: memoryZh,
       install: installZh,
       constants: constantsZh,
+      assets: assetsZh,
+      workspace: workspaceZh,
     },
   },
   "zh-TW": {

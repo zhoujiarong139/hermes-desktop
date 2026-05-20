@@ -648,6 +648,24 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Assets
+  listAssets: () => Promise<
+    Array<{
+      name: string;
+      source_path: string;
+      size: number;
+      modified: number;
+      exists: boolean;
+      added_at: number;
+    }>
+  >;
+  getAsset: (name: string) => Promise<string>;
+  removeAsset: (name: string) => Promise<boolean>;
+  addAssetToChat: (
+    name: string,
+    sessionId: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {

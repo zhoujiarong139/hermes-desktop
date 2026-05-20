@@ -125,6 +125,14 @@ import {
   resumeCronJob,
   triggerCronJob,
 } from "./cronjobs";
+import { listAssets, getAsset, removeAsset, addAssetToChat, addAsset } from "./assets";
+import {
+  listWorkspaceDocuments,
+  saveWorkspaceDocument,
+  getWorkspaceDocument,
+  openWorkspaceDocument,
+  deleteWorkspaceDocument,
+} from "./workspace";
 import {
   listBoards as kanbanListBoards,
   currentBoard as kanbanCurrentBoard,
@@ -1229,6 +1237,51 @@ function setupIPC(): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
+  });
+
+  // Assets
+  ipcMain.handle("list-assets", () => {
+    return listAssets();
+  });
+
+  ipcMain.handle("get-asset", (_event, name: string) => {
+    return getAsset(name);
+  });
+
+  ipcMain.handle("remove-asset", (_event, name: string) => {
+    return removeAsset(name);
+  });
+
+  ipcMain.handle("add-asset-to-chat", (_event, name: string, sessionId: string) => {
+    return addAssetToChat(name, sessionId);
+  });
+
+  ipcMain.handle("add-asset", (_event, name: string, base64Data: string) => {
+    return addAsset(name, base64Data);
+  });
+
+  // Workspace
+  ipcMain.handle("list-workspace-documents", () => {
+    return listWorkspaceDocuments();
+  });
+
+  ipcMain.handle(
+    "save-workspace-document",
+    (_event, name: string, base64Data: string) => {
+      return saveWorkspaceDocument(name, base64Data);
+    },
+  );
+
+  ipcMain.handle("get-workspace-document", (_event, name: string) => {
+    return getWorkspaceDocument(name);
+  });
+
+  ipcMain.handle("open-workspace-document", (_event, name: string) => {
+    return openWorkspaceDocument(name);
+  });
+
+  ipcMain.handle("delete-workspace-document", (_event, name: string) => {
+    return deleteWorkspaceDocument(name);
   });
 }
 

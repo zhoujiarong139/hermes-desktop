@@ -13,6 +13,8 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import Assets from "../Assets/Assets";
+import Workspace from "../Workspace/Workspace";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import hermeslogo from "../../assets/hermes.png";
@@ -32,6 +34,7 @@ import {
   Timer,
   Kanban as KanbanIcon,
   Download,
+  Grid,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
@@ -40,6 +43,7 @@ type View =
   | "chat"
   | "sessions"
   | "agents"
+  | "assets"
   | "office"
   | "models"
   | "providers"
@@ -56,6 +60,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
   { view: "agents", icon: Users, labelKey: "navigation.agents" },
+  { view: "assets", icon: Grid, labelKey: "navigation.assets" },
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
   { view: "models", icon: Layers, labelKey: "navigation.models" },
@@ -92,6 +97,8 @@ function Layout({
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
   const [remoteMode, setRemoteMode] = useState(false);
+  const [workspaceWidth, setWorkspaceWidth] = useState(320);
+  const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -272,14 +279,50 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        <div style={paneStyle("chat")}>
-          <Chat
-            messages={messages}
-            setMessages={setMessages}
-            sessionId={currentSessionId}
-            profile={activeProfile}
-            onNewChat={handleNewChat}
-          />
+        <div className="content-main">
+          <div style={paneStyle("chat")} className="content-chat">
+            <Chat
+              messages={messages}
+              setMessages={setMessages}
+              sessionId={currentSessionId}
+              profile={activeProfile}
+              onNewChat={handleNewChat}
+            />
+          </div>
+
+          {view === "chat" && (
+            <div
+              className="resize-handle"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX;
+                const startWidth = workspaceWidth;
+                const onMouseMove = (moveEvent: MouseEvent) => {
+                  const delta = startX - moveEvent.clientX;
+                  const newWidth = Math.max(200, Math.min(600, startWidth + delta));
+                  setWorkspaceWidth(newWidth);
+                };
+                const onMouseUp = () => {
+                  document.removeEventListener("mousemove", onMouseMove);
+                  document.removeEventListener("mouseup", onMouseUp);
+                };
+                document.addEventListener("mousemove", onMouseMove);
+                document.addEventListener("mouseup", onMouseUp);
+              }}
+            />
+          )}
+
+          {view === "chat" && (
+            <div style={{ width: workspaceCollapsed ? 40 : workspaceWidth, flexShrink: 0 }}>
+              <Workspace
+                width={workspaceWidth}
+                collapsed={workspaceCollapsed}
+                onToggle={() => setWorkspaceCollapsed((prev) => !prev)}
+                onWidthChange={setWorkspaceWidth}
+                profile={activeProfile}
+              />
+            </div>
+          )}
         </div>
 
         {visitedViews.has("sessions") && (
@@ -311,6 +354,12 @@ function Layout({
                 }}
               />
             )}
+          </div>
+        )}
+
+        {visitedViews.has("assets") && (
+          <div style={paneStyle("assets")}>
+            <Assets profile={activeProfile} />
           </div>
         )}
 

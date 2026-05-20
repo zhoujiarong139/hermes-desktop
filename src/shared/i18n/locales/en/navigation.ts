@@ -2,6 +2,7 @@ export default {
   chat: "Chat",
   sessions: "Sessions",
   agents: "Profiles",
+  assets: "Assets",
   office: "Office",
   models: "Models",
   providers: "Providers",

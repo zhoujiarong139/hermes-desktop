@@ -1,0 +1,16 @@
+export default {
+  title: "工作区",
+  toggle: "切换工作区",
+  empty: "暂无文档",
+  emptyHint: "任务生成的文档将显示在这里",
+  favorite: "添加到收藏",
+  favorited: "已添加收藏",
+  open: "打开",
+  download: "下载",
+  preview: "预览",
+  zoomIn: "放大",
+  zoomOut: "缩小",
+  resetZoom: "重置缩放",
+  collapse: "收起",
+  expand: "展开",
+} as const;

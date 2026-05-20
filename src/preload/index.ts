@@ -809,6 +809,60 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Assets
+  listAssets: (): Promise<
+    Array<{
+      name: string;
+      source_path: string;
+      size: number;
+      modified: number;
+      exists: boolean;
+      added_at: number;
+    }>
+  > => ipcRenderer.invoke("list-assets"),
+
+  getAsset: (name: string): Promise<string> =>
+    ipcRenderer.invoke("get-asset", name),
+
+  removeAsset: (name: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-asset", name),
+
+  addAssetToChat: (
+    name: string,
+    sessionId: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("add-asset-to-chat", name, sessionId),
+
+  addAsset: (name: string, base64Data: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("add-asset", name, base64Data),
+
+  // Workspace
+  listWorkspaceDocuments: (): Promise<
+    Array<{
+      id: string;
+      name: string;
+      type: string;
+      size: number;
+      createdAt: number;
+      path: string;
+    }>
+  > => ipcRenderer.invoke("list-workspace-documents"),
+
+  saveWorkspaceDocument: (
+    name: string,
+    base64Data: string,
+  ): Promise<{ success: boolean; id?: string; path?: string; error?: string }> =>
+    ipcRenderer.invoke("save-workspace-document", name, base64Data),
+
+  getWorkspaceDocument: (name: string): Promise<string | null> =>
+    ipcRenderer.invoke("get-workspace-document", name),
+
+  openWorkspaceDocument: (name: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("open-workspace-document", name),
+
+  deleteWorkspaceDocument: (name: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("delete-workspace-document", name),
 };
 
 if (process.contextIsolated) {

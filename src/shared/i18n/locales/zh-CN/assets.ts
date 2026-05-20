@@ -1,0 +1,16 @@
+export default {
+  title: "资产库",
+  search: "搜索资产...",
+  today: "今天",
+  yesterday: "昨天",
+  thisWeek: "本周",
+  earlier: "更早",
+  empty: "暂无资产",
+  emptyHint: "任务输出中的文件可以保存为资产",
+  noMatch: "没有匹配的资产",
+  download: "下载",
+  remove: "移除",
+  pushToChat: "发送到聊天",
+  copyToWorkspace: "复制到工作区",
+  openWithApp: "用应用打开",
+} as const;
