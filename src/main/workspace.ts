@@ -26,8 +26,8 @@ function getWorkspacePath(): string {
 }
 
 function getMonitoredDir(): string {
-  // Default monitored directory
-  return "/root/workspace";
+  // Default monitored directory - /tmp/workspace for local development
+  return "/tmp/workspace";
 }
 
 function generateId(): string {
