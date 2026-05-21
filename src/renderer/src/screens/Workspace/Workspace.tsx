@@ -218,29 +218,38 @@ export function Workspace({
 
   const handleOpen = useCallback(async (doc: WorkspaceDocument): Promise<void> => {
     try {
+      // Use the IPC method which handles both internal and external paths
       await window.hermesAPI.openWorkspaceDocument(doc.name);
     } catch (err) {
       console.error("Failed to open document:", err);
     }
   }, []);
 
-  const handleDownload = useCallback((doc: WorkspaceDocument): void => {
-    if (!doc.base64Data) return;
-    const binary = atob(doc.base64Data);
-    const len = binary.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binary.charCodeAt(i);
+  const handleDownload = useCallback(async (doc: WorkspaceDocument): Promise<void> => {
+    try {
+      let base64Data = doc.base64Data;
+      if (!base64Data) {
+        base64Data = await window.hermesAPI.getWorkspaceDocument(doc.name) || "";
+      }
+      if (!base64Data) return;
+      const binary = atob(base64Data);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const blob = new Blob([bytes]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.name.split("/").pop() || doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to download:", err);
     }
-    const blob = new Blob([bytes]);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }, []);
 
   if (selectedDoc) {
@@ -333,7 +342,7 @@ export function Workspace({
             <div key={doc.id} className="workspace-item">
               <div
                 className="workspace-item-preview"
-                onClick={() => handlePreview(doc)}
+                onClick={() => void handleOpen(doc)}
               >
                 {IMAGE_EXTS.includes(getFileExt(doc.name)) ? (
                   doc.base64Data ? (
@@ -341,6 +350,17 @@ export function Workspace({
                       src={`data:image/${getFileExt(doc.name)};base64,${doc.base64Data}`}
                       alt={doc.name}
                       className="workspace-thumb-img"
+                    />
+                  ) : doc.isExternal && doc.path ? (
+                    <img
+                      src={`file://${doc.path}`}
+                      alt={doc.name}
+                      className="workspace-thumb-img"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        target.parentElement!.innerHTML = `<svg class="workspace-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>`;
+                      }}
                     />
                   ) : (
                     <DocIcon name={doc.name} className="workspace-thumb-icon" />

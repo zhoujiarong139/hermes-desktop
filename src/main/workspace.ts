@@ -214,9 +214,14 @@ export async function openWorkspaceDocument(
     // Then check external monitored directory
     if (!foundPath) {
       const externalDir = getMonitoredDir();
+      // For relative paths like "子目录/文件.html", join works correctly
       const externalPath = join(externalDir, name);
+      console.log(`[Workspace] Looking for external file: ${externalPath}`);
       if (existsSync(externalPath)) {
         foundPath = externalPath;
+        console.log(`[Workspace] Found external file at: ${foundPath}`);
+      } else {
+        console.log(`[Workspace] External file not found at: ${externalPath}`);
       }
     }
 
