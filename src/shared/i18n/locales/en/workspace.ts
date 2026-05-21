@@ -7,6 +7,7 @@ export default {
   favorited: "Added to favorites",
   open: "Open",
   download: "Download",
+  delete: "Delete",
   preview: "Preview",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",

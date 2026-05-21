@@ -7,6 +7,7 @@ export default {
   favorited: "已添加收藏",
   open: "打开",
   download: "下载",
+  delete: "删除",
   preview: "预览",
   zoomIn: "放大",
   zoomOut: "缩小",

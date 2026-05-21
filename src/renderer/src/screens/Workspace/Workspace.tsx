@@ -252,6 +252,26 @@ export function Workspace({
     }
   }, []);
 
+  const handleDelete = useCallback(async (doc: WorkspaceDocument): Promise<void> => {
+    if (!confirm(`Delete "${doc.name}"?`)) return;
+    try {
+      if (doc.isExternal) {
+        // For external files, delete directly from filesystem
+        const { shell } = await import("@electron/remote");
+        const fs = await import("fs");
+        const fsPath = doc.path;
+        if (fs.existsSync(fsPath)) {
+          fs.unlinkSync(fsPath);
+        }
+      } else {
+        await window.hermesAPI.deleteWorkspaceDocument(doc.name);
+      }
+      void loadDocuments();
+    } catch (err) {
+      console.error("Failed to delete:", err);
+    }
+  }, [loadDocuments]);
+
   if (selectedDoc) {
     return (
       <WorkspacePreview
@@ -430,6 +450,24 @@ export function Workspace({
                       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                       <polyline points="7 10 12 15 17 10" />
                       <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </button>
+                  <button
+                    className="workspace-action-btn danger"
+                    onClick={() => void handleDelete(doc)}
+                    title={t("workspace.delete")}
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 2 2 2v2" />
                     </svg>
                   </button>
                 </div>
