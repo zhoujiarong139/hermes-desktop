@@ -34,12 +34,20 @@ function generateId(): string {
   return `doc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-function scanExternalDir(dirPath: string): WorkspaceDocument[] {
+function scanExternalDir(dirPath: string, basePath?: string): WorkspaceDocument[] {
   const documents: WorkspaceDocument[] = [];
+  const rootPath = basePath || dirPath;
 
   if (!existsSync(dirPath)) {
     return documents;
   }
+
+  const SUPPORTED_EXTS = [
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico",
+    "mp4", "webm", "ogg", "mov", "avi", "m4v",
+    "pdf", "md", "txt", "html", "htm",
+    "ppt", "pptx", "doc", "docx", "xls", "xlsx",
+  ];
 
   try {
     const files = readdirSync(dirPath);
@@ -49,17 +57,13 @@ function scanExternalDir(dirPath: string): WorkspaceDocument[] {
         const stat = statSync(filePath);
         if (stat.isFile()) {
           const ext = file.split(".").pop()?.toLowerCase() || "";
-          const SUPPORTED_EXTS = [
-            "png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico",
-            "mp4", "webm", "ogg", "mov", "avi", "m4v",
-            "pdf", "md", "txt", "html", "htm",
-            "ppt", "pptx", "doc", "docx", "xls", "xlsx",
-          ];
 
           if (SUPPORTED_EXTS.includes(ext)) {
+            // Calculate relative path from monitored root
+            const relativePath = filePath.replace(rootPath + "/", "");
             documents.push({
-              id: `ext-${file}`,
-              name: file,
+              id: `ext-${relativePath.replace(/[\/\\]/g, "_")}`,
+              name: relativePath, // Show full relative path including subdirectory
               type: ext,
               size: stat.size,
               createdAt: Math.floor(stat.mtimeMs / 1000),
@@ -67,6 +71,10 @@ function scanExternalDir(dirPath: string): WorkspaceDocument[] {
               isExternal: true,
             });
           }
+        } else if (stat.isDirectory()) {
+          // Recursively scan subdirectories
+          const subDocs = scanExternalDir(filePath, rootPath);
+          documents.push(...subDocs);
         }
       } catch {
         // Skip files we can't stat
