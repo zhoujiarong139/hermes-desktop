@@ -941,7 +941,7 @@ function setupIPC(): void {
       return listCachedSessions(limit, offset);
     },
   );
-  ipcMain.handle("sync-session-cache", () => {
+  ipcMain.handle("sync-session-cache", (_event) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshListCachedSessions(conn.ssh, 50);
@@ -949,8 +949,9 @@ function setupIPC(): void {
   });
   ipcMain.handle(
     "update-session-title",
-    (_event, sessionId: string, title: string) =>
-      updateSessionTitle(sessionId, title),
+    (_event, sessionId: string, title: string) => {
+      return updateSessionTitle(sessionId, title);
+    },
   );
 
   // Session search

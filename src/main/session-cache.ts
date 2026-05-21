@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile } from "./utils";
@@ -6,9 +6,31 @@ import Database from "better-sqlite3";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
 
-const CACHE_DIR = join(HERMES_HOME, "desktop");
-const CACHE_FILE = join(CACHE_DIR, "sessions.json");
-const DB_PATH = join(HERMES_HOME, "state.db");
+function getProfileDbPath(profile?: string): string {
+  if (profile && profile !== "default") {
+    return join(HERMES_HOME, "profiles", profile, "state.db");
+  }
+  return join(HERMES_HOME, "state.db");
+}
+
+function getProfileCacheDir(profile?: string): string {
+  if (profile && profile !== "default") {
+    const dir = join(HERMES_HOME, "profiles", profile, "desktop");
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+  const cacheDir = join(HERMES_HOME, "desktop");
+  if (!existsSync(cacheDir)) {
+    mkdirSync(cacheDir, { recursive: true });
+  }
+  return cacheDir;
+}
+
+function getCacheFile(profile?: string): string {
+  return join(getProfileCacheDir(profile), "sessions.json");
+}
 
 export interface CachedSession {
   id: string;
@@ -55,32 +77,125 @@ function generateTitle(message: string): string {
   return title || text.slice(0, 45) + "...";
 }
 
-function readCache(): CacheData {
+function readCache(profile?: string): CacheData {
+  const cacheFile = getCacheFile(profile);
   try {
-    if (!existsSync(CACHE_FILE)) return { sessions: [], lastSync: 0 };
-    return JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
+    if (!existsSync(cacheFile)) return { sessions: [], lastSync: 0 };
+    return JSON.parse(readFileSync(cacheFile, "utf-8"));
   } catch {
     return { sessions: [], lastSync: 0 };
   }
 }
 
-function writeCache(data: CacheData): void {
+function writeCache(data: CacheData, profile?: string): void {
+  const cacheFile = getCacheFile(profile);
   try {
-    safeWriteFile(CACHE_FILE, JSON.stringify(data));
+    safeWriteFile(cacheFile, JSON.stringify(data));
   } catch {
     // non-fatal
   }
 }
 
-function getDb(): Database.Database | null {
-  if (!existsSync(DB_PATH)) return null;
-  return new Database(DB_PATH, { readonly: true });
+function getDb(profile?: string): Database.Database | null {
+  const dbPath = getProfileDbPath(profile);
+  if (!existsSync(dbPath)) return null;
+  return new Database(dbPath, { readonly: true });
 }
 
+function getAllProfileDbs(): Array<{path: string, profile: string}> {
+  const dbs: Array<{path: string, profile: string}> = [];
+  
+  // Default profile
+  const defaultDb = join(HERMES_HOME, "state.db");
+  if (existsSync(defaultDb)) {
+    dbs.push({ path: defaultDb, profile: "default" });
+  }
+  
+  // Profile-specific databases
+  const profilesDir = join(HERMES_HOME, "profiles");
+  if (existsSync(profilesDir)) {
+    try {
+      const profiles = readdirSync(profilesDir);
+      for (const profile of profiles) {
+        if (profile.startsWith(".")) continue;
+        const dbPath = join(profilesDir, profile, "state.db");
+        if (existsSync(dbPath)) {
+          dbs.push({ path: dbPath, profile });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  
+  return dbs;
+}
+
+
 // Sync from hermes DB to local cache — only fetches new/updated sessions
-export function syncSessionCache(): CachedSession[] {
-  const cache = readCache();
-  const db = getDb();
+export function syncSessionCache(profile?: string): CachedSession[] {
+  // When no profile specified, scan all profiles and merge results
+  if (!profile) {
+    const allDbs = getAllProfileDbs();
+    let allSessions: CachedSession[] = [];
+    
+    for (const { path, profile: dbProfile } of allDbs) {
+      try {
+        const db = new Database(path, { readonly: true });
+        const rows = db
+          .prepare(
+            `SELECT s.id, s.started_at, s.source, s.message_count, s.model, s.title
+             FROM sessions s
+             ORDER BY s.started_at DESC
+             LIMIT 100`,
+          )
+          .all() as Array<{
+          id: string;
+          started_at: number;
+          source: string;
+          message_count: number;
+          model: string;
+          title: string | null;
+        }>;
+        
+        for (const row of rows) {
+          allSessions.push({
+            id: row.id,
+            title: row.title || t("sessions.newConversation", getAppLocale()),
+            startedAt: row.started_at,
+            source: row.source,
+            messageCount: row.message_count,
+            model: row.model || "",
+          });
+        }
+        
+        db.close();
+      } catch {
+        // skip this db
+      }
+    }
+    
+    // Sort all sessions by startedAt descending and deduplicate by id
+    allSessions.sort((a, b) => b.startedAt - a.startedAt);
+    const seen = new Set<string>();
+    allSessions = allSessions.filter(s => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+    
+    // Save to default cache
+    const cacheData: CacheData = {
+      sessions: allSessions,
+      lastSync: Math.floor(Date.now() / 1000),
+    };
+    writeCache(cacheData);
+    
+    return allSessions;
+  }
+  
+  const cache = readCache(profile);
+  const db = getDb(profile);
   if (!db) return cache.sessions;
 
   try {
@@ -192,7 +307,7 @@ export function syncSessionCache(): CachedSession[] {
       sessions: allSessions,
       lastSync: Math.floor(Date.now() / 1000),
     };
-    writeCache(updated);
+    writeCache(updated, profile);
     return updated.sessions;
   } catch {
     return cache.sessions;
@@ -205,8 +320,9 @@ export function syncSessionCache(): CachedSession[] {
 export function listCachedSessions(
   limit = 50,
   offset = 0,
+  profile?: string,
 ): CachedSession[] {
-  const cache = readCache();
+  const cache = readCache(profile);
   return cache.sessions.slice(offset, offset + limit);
 }
 
@@ -214,11 +330,12 @@ export function listCachedSessions(
 export function updateSessionTitle(
   sessionId: string,
   title: string,
+  profile?: string,
 ): void {
-  const cache = readCache();
+  const cache = readCache(profile);
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {
     cache.sessions[idx].title = title;
-    writeCache(cache);
+    writeCache(cache, profile);
   }
 }
