@@ -1285,6 +1285,10 @@ function setupIPC(): void {
   ipcMain.handle("delete-workspace-document", (_event, name: string) => {
     return deleteWorkspaceDocument(name);
   });
+
+  ipcMain.handle("delete-external-file", (_event, filePath: string) => {
+    return deleteExternalFile(filePath);
+  });
 }
 
 function buildMenu(): void {

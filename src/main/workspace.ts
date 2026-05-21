@@ -342,3 +342,21 @@ export function stopExternalFileWatcher(): void {
 export function getMonitoredDirPath(): string {
   return getMonitoredDir();
 }
+
+// Delete an external file by its full path
+export async function deleteExternalFile(
+  filePath: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!existsSync(filePath)) {
+      return { success: false, error: "File not found" };
+    }
+    unlinkSync(filePath);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to delete file",
+    };
+  }
+}

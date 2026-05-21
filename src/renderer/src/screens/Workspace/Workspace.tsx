@@ -10,6 +10,7 @@ interface WorkspaceDocument {
   createdAt: number;
   path: string;
   base64Data?: string;
+  isExternal?: boolean;
 }
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"];
@@ -256,13 +257,7 @@ export function Workspace({
     if (!confirm(`Delete "${doc.name}"?`)) return;
     try {
       if (doc.isExternal) {
-        // For external files, delete directly from filesystem
-        const { shell } = await import("@electron/remote");
-        const fs = await import("fs");
-        const fsPath = doc.path;
-        if (fs.existsSync(fsPath)) {
-          fs.unlinkSync(fsPath);
-        }
+        await window.hermesAPI.deleteExternalFile(doc.path);
       } else {
         await window.hermesAPI.deleteWorkspaceDocument(doc.name);
       }
