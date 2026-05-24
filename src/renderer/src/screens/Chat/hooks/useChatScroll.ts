@@ -13,13 +13,16 @@ export function useChatScroll(messages: ChatMessage[]): {
   bottomRef: React.RefObject<HTMLDivElement | null>;
 } {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   const userScrolledUpRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
+  const isAtBottomRef = useRef(true);
 
   const scrollToBottom = useCallback((force?: boolean) => {
     if (!force && userScrolledUpRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   }, []);
 
   // Track manual scroll position
@@ -28,8 +31,17 @@ export function useChatScroll(messages: ChatMessage[]): {
     if (!container) return;
     function handleScroll(): void {
       const el = container!;
+      // Check if user is within 60px of the bottom
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-      userScrolledUpRef.current = !atBottom;
+      const wasAtBottom = isAtBottomRef.current;
+      isAtBottomRef.current = atBottom;
+      // Only mark as "user scrolled up" if they scrolled UP away from bottom
+      // and we were previously at bottom (not if they scrolled down to bottom)
+      if (!atBottom && wasAtBottom) {
+        userScrolledUpRef.current = true;
+      } else if (atBottom) {
+        userScrolledUpRef.current = false;
+      }
     }
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => container.removeEventListener("scroll", handleScroll);
@@ -44,9 +56,13 @@ export function useChatScroll(messages: ChatMessage[]): {
       messages[messages.length - 1]?.role === "user";
     if (userJustSent) {
       userScrolledUpRef.current = false;
-      scrollToBottom(true);
-    } else {
-      scrollToBottom();
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => scrollToBottom(true));
+    } else if (messages.length > prevCount) {
+      // Agent/assistant message arrived - auto-scroll if near bottom
+      if (isAtBottomRef.current) {
+        requestAnimationFrame(() => scrollToBottom(false));
+      }
     }
   }, [messages, scrollToBottom]);
 

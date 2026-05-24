@@ -13,4 +13,22 @@ export default {
   pushToChat: "发送到聊天",
   copyToWorkspace: "复制到工作区",
   openWithApp: "用应用打开",
+  filters: {
+    all: "全部",
+    image: "图片",
+    video: "视频",
+    document: "文档",
+  },
+  detail: {
+    prompt: "提示词",
+    parameters: "参数",
+    model: "模型",
+    dimensions: "尺寸",
+    duration: "时长",
+    info: "文件信息",
+    size: "大小",
+    modified: "修改时间",
+    source: "来源",
+    noInfo: "暂无更多信息",
+  },
 } as const;

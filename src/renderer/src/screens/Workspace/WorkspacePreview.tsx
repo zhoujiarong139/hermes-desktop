@@ -9,9 +9,11 @@ interface WorkspaceDocument {
   createdAt: number;
   path: string;
   base64Data?: string;
+  isExternal?: boolean;
 }
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"];
+const HTML_EXT = "html";
 
 function getFileExt(name: string): string {
   return name.split(".").pop()?.toLowerCase() || "";
@@ -45,6 +47,7 @@ export function WorkspacePreview({
   const [zoom, setZoom] = useState(100);
   const ext = getFileExt(doc.name);
   const isImage = IMAGE_EXTS.includes(ext);
+  const isHtml = ext === HTML_EXT;
 
   const handleZoomIn = useCallback((): void => {
     setZoom((prev) => Math.min(prev + 25, 300));
@@ -79,6 +82,21 @@ export function WorkspacePreview({
               transition: "transform 0.2s ease",
             }}
             draggable={false}
+          />
+        </div>
+      );
+    }
+
+    if (isHtml && doc.isExternal && doc.path) {
+      // For external HTML files, render in iframe
+      const iframeUrl = `file://${doc.path}`;
+      return (
+        <div className="workspace-preview-iframe-container">
+          <iframe
+            src={iframeUrl}
+            title={doc.name}
+            className="workspace-preview-iframe"
+            sandbox="allow-scripts allow-same-origin"
           />
         </div>
       );

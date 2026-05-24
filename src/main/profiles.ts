@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { join } from "path";
+import { basename, join } from "path";
 import { homedir } from "os";
 import { promises as fs } from "fs";
 import { existsSync } from "fs";
@@ -9,6 +9,8 @@ import {
   hermesCliArgs,
   getEnhancedPath,
 } from "./installer";
+// Re-export HERMES_HOME so workspace.ts and index.ts can use it without circular imports
+export { HERMES_HOME };
 import {
   isValidNamedProfileName,
   isValidProfileName,
@@ -17,7 +19,21 @@ import {
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
-const PROFILES_DIR = join(HERMES_HOME, "profiles");
+// Detect if HERMES_HOME is a profile subdirectory (e.g. ~/.hermes/profiles/local).
+// If HERMES_HOME/.. is a "profiles" directory (named "profiles") and HERMES_HOME's
+// basename is a valid profile name, then the profiles root is HERMES_HOME/../..
+// This correctly resolves: ~/.hermes/profiles/local -> ~/.hermes
+const root = HERMES_HOME;
+const parentDir = join(root, "..");
+const resolvedProfilesRoot =
+  basename(parentDir) === "profiles" && isValidNamedProfileName(basename(root))
+    ? join(root, "..", "..")
+    : root;
+
+export { resolvedProfilesRoot };
+
+// Named profiles are under ~/.hermes/profiles/ (NOT ~/.hermes/profiles/profiles/)
+const PROFILES_DIR = join(resolvedProfilesRoot, "profiles");
 
 export interface ProfileInfo {
   name: string;
@@ -96,8 +112,11 @@ async function isGatewayRunning(profilePath: string): Promise<boolean> {
   }
 }
 
-async function getActiveProfileName(): Promise<string> {
-  const activeFile = join(HERMES_HOME, "active_profile");
+export async function getActiveProfileName(): Promise<string> {
+  // Use resolvedProfilesRoot instead of homedir() since $HOME may be a profile subdirectory
+  // (e.g., ~/.hermes/profiles/local/home) which would give a wrong path.
+  // resolvedProfilesRoot is always correctly computed (see profiles.ts init).
+  const activeFile = join(resolvedProfilesRoot, "active_profile");
   try {
     const name = await fs.readFile(activeFile, "utf-8");
     return name.trim() || "default";

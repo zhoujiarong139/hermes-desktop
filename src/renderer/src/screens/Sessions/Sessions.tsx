@@ -26,6 +26,7 @@ interface SessionsProps {
   onNewChat: () => void;
   currentSessionId: string | null;
   visible: boolean;
+  profile?: string;
 }
 
 function formatTime(ts: number): string {
@@ -153,6 +154,7 @@ function Sessions({
   onNewChat,
   currentSessionId,
   visible,
+  profile,
 }: SessionsProps): React.JSX.Element {
   const { t } = useI18n();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
@@ -165,15 +167,17 @@ function Sessions({
 
   const loadSessions = useCallback(async (): Promise<void> => {
     setLoading(true);
-    const cached = await window.hermesAPI.listCachedSessions(50);
-    if (cached.length > 0) {
+    // Only use cached data as fallback AFTER sync fails, don't display it first
+    const synced = await window.hermesAPI.syncSessionCache(profile);
+    if (synced.length > 0) {
+      setSessions(synced.slice(0, 50));
+    } else {
+      // Fallback to cache only if sync returned nothing
+      const cached = await window.hermesAPI.listCachedSessions(50, undefined, profile);
       setSessions(cached);
-      setLoading(false);
     }
-    const synced = await window.hermesAPI.syncSessionCache();
-    setSessions(synced.slice(0, 50));
     setLoading(false);
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     loadSessions();
@@ -188,6 +192,14 @@ function Sessions({
       loadSessions();
     }
   }, [visible, loadSessions]);
+
+  // Listen for chat done events to refresh sessions in real-time
+  useEffect(() => {
+    const cleanup = window.hermesAPI.onChatDone(() => {
+      void loadSessions();
+    });
+    return cleanup;
+  }, [loadSessions]);
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);

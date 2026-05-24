@@ -35,8 +35,8 @@ import {
   InstallProgress,
 } from "./installer";
 import {
-  isRemoteMode,
   isRemoteOnlyMode,
+  isRemoteMode,
   sendMessage,
   startGateway,
   stopGateway,
@@ -127,12 +127,23 @@ import {
 } from "./cronjobs";
 import { listAssets, getAsset, removeAsset, addAssetToChat, addAsset } from "./assets";
 import {
+  getAssetSocial,
+  toggleAssetLike,
+  getAssetComments,
+  addAssetComment,
+  deleteAssetComment,
+  incrementAssetShare,
+} from "./assets-metadata";
+import {
   listWorkspaceDocuments,
   saveWorkspaceDocument,
   getWorkspaceDocument,
   openWorkspaceDocument,
   deleteWorkspaceDocument,
+  deleteExternalFile,
   startExternalFileWatcher,
+  restartExternalFileWatcher,
+  notifyWorkspaceChanged,
 } from "./workspace";
 import {
   listBoards as kanbanListBoards,
@@ -261,6 +272,13 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow!.show();
+  });
+
+  mainWindow.webContents.on("before-input-event", (event, input) => {
+    if ((input.meta || input.control) && input.key === "-" && input.type === "keyDown") {
+      event.preventDefault();
+      mainWindow!.webContents.setZoomLevel(mainWindow!.webContents.zoomLevel - 0.5);
+    }
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -796,7 +814,8 @@ function setupIPC(): void {
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshListProfiles(conn.ssh);
-    return listProfiles();
+    const profiles = await listProfiles();
+    return profiles;
   });
   ipcMain.handle("create-profile", (_event, name: string, clone: boolean) => {
     const conn = getConnectionConfig();
@@ -810,8 +829,16 @@ function setupIPC(): void {
       return sshDeleteProfile(conn.ssh, name);
     return deleteProfile(name);
   });
-  ipcMain.handle("set-active-profile", (_event, name: string) => {
+  ipcMain.handle("set-active-profile", async (_event, name: string) => {
     if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
+    // Restart workspace file watcher for the new profile
+    await restartExternalFileWatcher();
+    // Notify renderer to refresh workspace
+    // Use setTimeout to ensure profile state is fully flushed before notification
+    setTimeout(() => {
+      console.error("[workspace] profile switched to", name);
+      notifyWorkspaceChanged();
+    }, 200);
     return true;
   });
 
@@ -934,23 +961,23 @@ function setupIPC(): void {
   // Session cache (fast local cache with generated titles)
   ipcMain.handle(
     "list-cached-sessions",
-    (_event, limit?: number, offset?: number) => {
+    (_event, limit?: number, offset?: number, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshListCachedSessions(conn.ssh, limit, offset);
-      return listCachedSessions(limit, offset);
+      return listCachedSessions(limit, offset, profile);
     },
   );
-  ipcMain.handle("sync-session-cache", (_event) => {
+  ipcMain.handle("sync-session-cache", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshListCachedSessions(conn.ssh, 50);
-    return syncSessionCache();
+    return syncSessionCache(profile);
   });
   ipcMain.handle(
     "update-session-title",
-    (_event, sessionId: string, title: string) => {
-      return updateSessionTitle(sessionId, title);
+    (_event, sessionId: string, title: string, profile?: string) => {
+      return updateSessionTitle(sessionId, title, profile);
     },
   );
 
@@ -1242,27 +1269,54 @@ function setupIPC(): void {
   });
 
   // Assets
-  ipcMain.handle("list-assets", () => {
-    return listAssets();
+  ipcMain.handle("list-assets", (_event, profile?: string) => {
+    return listAssets(profile);
   });
 
-  ipcMain.handle("get-asset", (_event, name: string) => {
-    return getAsset(name);
+  ipcMain.handle("get-asset", (_event, name: string, profile?: string) => {
+    return getAsset(name, profile);
   });
 
-  ipcMain.handle("remove-asset", (_event, name: string) => {
-    return removeAsset(name);
+  ipcMain.handle("remove-asset", (_event, name: string, profile?: string) => {
+    return removeAsset(name, profile);
   });
 
-  ipcMain.handle("add-asset-to-chat", (_event, name: string, sessionId: string) => {
-    return addAssetToChat(name, sessionId);
+  ipcMain.handle("add-asset-to-chat", (_event, name: string, sessionId: string, profile?: string) => {
+    return addAssetToChat(name, sessionId, profile);
   });
 
-  ipcMain.handle("add-asset", (_event, name: string, base64Data: string) => {
-    return addAsset(name, base64Data);
+  ipcMain.handle("add-asset", (_event, name: string, base64Data: string, profile?: string) => {
+    return addAsset(name, base64Data, profile);
+  });
+
+  // Asset social features
+  ipcMain.handle("get-asset-social", (_event, name: string, profile?: string) => {
+    return getAssetSocial(name, profile);
+  });
+  ipcMain.handle("toggle-asset-like", (_event, name: string, userId: string, profile?: string) => {
+    return toggleAssetLike(name, userId, profile);
+  });
+  ipcMain.handle("get-asset-comments", (_event, name: string, profile?: string) => {
+    return getAssetComments(name, profile);
+  });
+  ipcMain.handle("add-asset-comment", (_event, name: string, author: string, body: string, profile?: string) => {
+    return addAssetComment(name, author, body, profile);
+  });
+  ipcMain.handle("delete-asset-comment", (_event, name: string, commentId: string, profile?: string) => {
+    return deleteAssetComment(name, commentId, profile);
+  });
+  ipcMain.handle("increment-asset-share", (_event, name: string, profile?: string) => {
+    return incrementAssetShare(name, profile);
   });
 
   // Workspace
+  ipcMain.handle("debug-monitored-dirs", async () => {
+    const { getActiveProfileName, getMonitoredDirs } = require("./workspace") as typeof import("./workspace");
+    const activeProfile = await getActiveProfileName();
+    const dirs = await getMonitoredDirs();
+    const docs = await listWorkspaceDocuments();
+    return { activeProfile, dirs, docCount: docs.length, docPaths: docs.slice(0,5).map((d: { path: string }) => d.path) };
+  });
   ipcMain.handle("list-workspace-documents", () => {
     return listWorkspaceDocuments();
   });
@@ -1348,9 +1402,9 @@ function buildMenu(): void {
     {
       label: "View",
       submenu: [
-        { role: "resetZoom" },
-        { role: "zoomIn" },
-        { role: "zoomOut" },
+        { role: "resetZoom", accelerator: "CmdOrCtrl+0", acceleratorWorksWhenHidden: true },
+        { role: "zoomIn", accelerator: "CmdOrCtrl+=", acceleratorWorksWhenHidden: true },
+        { role: "zoomOut", accelerator: "CmdOrCtrl+-", acceleratorWorksWhenHidden: true },
         { type: "separator" },
         { role: "togglefullscreen" },
         ...(is.dev
@@ -1484,7 +1538,9 @@ app.whenReady().then(() => {
   setupIPC();
   createWindow();
   setupUpdater();
-  startExternalFileWatcher();
+  startExternalFileWatcher().catch((err) => {
+    console.error("Failed to start external file watcher:", err);
+  });
 
   // Auto-start SSH tunnel if configured
   const conn = getConnectionConfig();

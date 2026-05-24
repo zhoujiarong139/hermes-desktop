@@ -13,4 +13,22 @@ export default {
   pushToChat: "Push to chat",
   copyToWorkspace: "Copy to workspace",
   openWithApp: "Open with app",
+  filters: {
+    all: "All",
+    image: "Images",
+    video: "Videos",
+    document: "Documents",
+  },
+  detail: {
+    prompt: "Prompt",
+    parameters: "Parameters",
+    model: "Model",
+    dimensions: "Dimensions",
+    duration: "Duration",
+    info: "File Info",
+    size: "Size",
+    modified: "Modified",
+    source: "Source",
+    noInfo: "No additional information available",
+  },
 } as const;

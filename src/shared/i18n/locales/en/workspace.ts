@@ -14,4 +14,5 @@ export default {
   resetZoom: "Reset zoom",
   collapse: "Collapse",
   expand: "Expand",
+  refresh: "Refresh",
 } as const;

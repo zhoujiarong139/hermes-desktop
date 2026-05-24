@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile } from "./utils";
@@ -131,15 +131,64 @@ function getAllProfileDbs(): Array<{path: string, profile: string}> {
   return dbs;
 }
 
+// Get JSONL sessions directory for a profile
+function getJsonlSessionsDir(profile?: string): string {
+  if (profile && profile !== "default") {
+    return join(HERMES_HOME, "profiles", profile, "sessions");
+  }
+  return join(HERMES_HOME, "sessions");
+}
+
+// Read sessions from JSONL format (sessions.json)
+// Hermes Agent newer versions store sessions here instead of SQLite
+interface JsonlSessionMeta {
+  session_key: string;
+  session_id: string;
+  created_at: string;
+  updated_at: string;
+  display_name: string | null;
+  platform: string;
+  message_count: number;
+}
+
+function readJsonlSessions(dir: string): CachedSession[] {
+  const sessionsFile = join(dir, "sessions.json");
+  if (!existsSync(sessionsFile)) return [];
+
+  try {
+    const content = readFileSync(sessionsFile, "utf-8");
+    const data = JSON.parse(content) as Record<string, JsonlSessionMeta>;
+    const sessions: CachedSession[] = [];
+
+    for (const meta of Object.values(data)) {
+      // Parse ISO date string to Unix timestamp
+      const startedAt = Math.floor(new Date(meta.created_at).getTime() / 1000);
+      sessions.push({
+        id: meta.session_id,
+        title: meta.display_name || meta.session_id,
+        startedAt,
+        source: meta.platform || "cli",
+        messageCount: meta.message_count || 0,
+        model: "",
+      });
+    }
+
+    return sessions;
+  } catch {
+    return [];
+  }
+}
+
 
 // Sync from hermes DB to local cache — only fetches new/updated sessions
 export function syncSessionCache(profile?: string): CachedSession[] {
   // When no profile specified, scan all profiles and merge results
   if (!profile) {
+    const seen = new Set<string>();
     const allDbs = getAllProfileDbs();
     let allSessions: CachedSession[] = [];
     
-    for (const { path, profile: dbProfile } of allDbs) {
+    for (const { path } of allDbs) {
       try {
         const db = new Database(path, { readonly: true });
         const rows = db
@@ -174,10 +223,22 @@ export function syncSessionCache(profile?: string): CachedSession[] {
         // skip this db
       }
     }
-    
+
+    // Also read sessions from JSONL format (Hermes Agent newer versions)
+    const allProfileDbs = getAllProfileDbs();
+    for (const { profile: p } of allProfileDbs) {
+      const jsonlDir = getJsonlSessionsDir(p === "default" ? undefined : p);
+      const jsonlSessions = readJsonlSessions(jsonlDir);
+      for (const s of jsonlSessions) {
+        if (!seen.has(s.id)) {
+          allSessions.push(s);
+          seen.add(s.id);
+        }
+      }
+    }
+
     // Sort all sessions by startedAt descending and deduplicate by id
     allSessions.sort((a, b) => b.startedAt - a.startedAt);
-    const seen = new Set<string>();
     allSessions = allSessions.filter(s => {
       if (seen.has(s.id)) return false;
       seen.add(s.id);
@@ -298,8 +359,9 @@ export function syncSessionCache(profile?: string): CachedSession[] {
       }
     }
 
-    // Merge: new sessions first (most recent), then existing
-    const allSessions = [...newSessions, ...cache.sessions];
+    // Merge: new sessions first (most recent), then existing, then JSONL sessions
+    const jsonlSessions = readJsonlSessions(getJsonlSessionsDir(profile));
+    const allSessions = [...newSessions, ...cache.sessions, ...jsonlSessions];
     // Sort by startedAt descending
     allSessions.sort((a, b) => b.startedAt - a.startedAt);
 
@@ -310,6 +372,9 @@ export function syncSessionCache(profile?: string): CachedSession[] {
     writeCache(updated, profile);
     return updated.sessions;
   } catch {
+    // Reset lastSync to 0 so next sync does a full resync instead of
+    // permanently filtering out sessions newer than the failed sync time
+    writeCache({ sessions: cache.sessions, lastSync: 0 }, profile);
     return cache.sessions;
   } finally {
     db.close();

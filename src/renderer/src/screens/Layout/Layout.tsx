@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-import Chat, { ChatMessage } from "../Chat/Chat";
+import { useState, useCallback, useEffect, useRef } from "react";
+import Chat, { ChatMessage, type ChatHandle } from "../Chat/Chat";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Settings from "../Settings/Settings";
@@ -99,6 +99,8 @@ function Layout({
   const [remoteMode, setRemoteMode] = useState(false);
   const [workspaceWidth, setWorkspaceWidth] = useState(320);
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+  const [pendingWorkspaceDoc, setPendingWorkspaceDoc] = useState<{ name: string; base64Data: string } | null>(null);
+  const chatRef = useRef<ChatHandle>(null);
 
   const paneStyle = (target: View): React.CSSProperties => ({
     display: view === target ? "flex" : "none",
@@ -197,7 +199,37 @@ function Layout({
     setActiveProfile(name);
     setMessages([]);
     setCurrentSessionId(null);
+    // Notify the main process to update active_profile so workspace watchers use the right profile
+    void window.hermesAPI.setActiveProfile(name);
   }, []);
+
+  // Send-to-chat: when user clicks the paper-plane button in workspace,
+  // fetch the doc content and store it as pending. The useEffect below
+  // injects it into the ChatInput once the chat panel is visible.
+  const handleSendToChat = useCallback(
+    async (doc: { name: string; path: string; isExternal?: boolean }) => {
+      // Switch to chat view first so Chat is mounted when we inject
+      goTo("chat");
+      try {
+        const base64Data = await window.hermesAPI.getWorkspaceDocument(doc.name);
+        if (base64Data) {
+          setPendingWorkspaceDoc({ name: doc.name, base64Data });
+        }
+      } catch (err) {
+        console.error("Failed to get workspace document for chat:", err);
+      }
+    },
+    [goTo],
+  );
+
+  // Inject pending workspace document as attachment when chat view is active
+  useEffect(() => {
+    if (view !== "chat" || !pendingWorkspaceDoc) return;
+    const doc = pendingWorkspaceDoc;
+    // Clear before injecting so the same doc can be re-sent if clicked again
+    setPendingWorkspaceDoc(null);
+    void chatRef.current?.addFilesFromBase64(doc.base64Data, doc.name);
+  }, [view, pendingWorkspaceDoc]);
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
@@ -279,18 +311,21 @@ function Layout({
             onDismiss={onDismissVerifyWarning}
           />
         )}
-        <div className="content-main">
-          <div style={paneStyle("chat")} className="content-chat">
-            <Chat
-              messages={messages}
-              setMessages={setMessages}
-              sessionId={currentSessionId}
-              profile={activeProfile}
-              onNewChat={handleNewChat}
-            />
-          </div>
+        {view === "chat" && (
+          <div className="chat-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+            <div className="content-main">
+              <div style={paneStyle("chat")} className="content-chat">
+                <Chat
+                  ref={chatRef}
+                  messages={messages}
+                  setMessages={setMessages}
+                  sessionId={currentSessionId}
+                  profile={activeProfile}
+                  onNewChat={handleNewChat}
+                />
+              </div>
+            </div>
 
-          {view === "chat" && (
             <div
               className="resize-handle"
               onMouseDown={(e) => {
@@ -310,9 +345,7 @@ function Layout({
                 document.addEventListener("mouseup", onMouseUp);
               }}
             />
-          )}
 
-          {view === "chat" && (
             <div style={{ width: workspaceCollapsed ? 40 : workspaceWidth, flexShrink: 0 }}>
               <Workspace
                 width={workspaceWidth}
@@ -320,10 +353,11 @@ function Layout({
                 onToggle={() => setWorkspaceCollapsed((prev) => !prev)}
                 onWidthChange={setWorkspaceWidth}
                 profile={activeProfile}
+                onSendToChat={handleSendToChat}
               />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {visitedViews.has("sessions") && (
           <div style={paneStyle("sessions")}>
@@ -335,6 +369,7 @@ function Layout({
                 onNewChat={handleNewChat}
                 currentSessionId={currentSessionId}
                 visible={view === "sessions"}
+                profile={activeProfile}
               />
             )}
           </div>

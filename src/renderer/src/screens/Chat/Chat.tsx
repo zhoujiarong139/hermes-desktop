@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatHeader } from "./ChatHeader";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -24,14 +24,13 @@ interface ChatProps {
   onNewChat?: () => void;
 }
 
-function Chat({
-  messages,
-  setMessages,
-  sessionId,
-  profile,
-  onSessionStarted,
-  onNewChat,
-}: ChatProps): React.JSX.Element {
+/** Exposed to parent (Layout) so it can inject workspace documents as attachments */
+export interface ChatHandle {
+  addFilesFromBase64(base64Data: string, filename: string): Promise<void>;
+}
+
+const Chat = forwardRef<ChatHandle, ChatProps>(
+  ({ messages, setMessages, sessionId, profile, onSessionStarted, onNewChat }, ref) => {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
@@ -186,6 +185,17 @@ function Chat({
     [eventHasFiles],
   );
 
+  // Bridge chatInputRef to parent via forwardRef (ChatHandle)
+  useImperativeHandle(
+    ref,
+    () => ({
+      addFilesFromBase64(base64Data: string, filename: string): Promise<void> {
+        return chatInputRef.current?.addFilesFromBase64(base64Data, filename) ?? Promise.resolve();
+      },
+    }),
+    [],
+  );
+
   return (
     <div
       className="chat-container"
@@ -247,6 +257,6 @@ function Chat({
       )}
     </div>
   );
-}
+});
 
 export default Chat;

@@ -1,7 +1,7 @@
 import { app } from "electron";
-import { join } from "path";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { join, dirname } from "path";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, unlinkSync } from "fs";
+import { getActiveProfileName } from "./profiles";
 
 interface Asset {
   name: string;
@@ -10,95 +10,129 @@ interface Asset {
   modified: number;
   exists: boolean;
   added_at: number;
+  type?: "image" | "video" | "document" | "other";
 }
 
-function getAssetsPath(): string {
-  const userDataPath = app.getPath("userData");
-  const assetsPath = join(userDataPath, "assets");
+async function getAssetsPath(profile?: string): Promise<string> {
+  const profileName = profile ?? await getActiveProfileName();
+  // Always use a fixed canonical path for assets storage
+  const assetsPath = join(app.getPath("home"), "Library", "Application Support", "hermes-desktop", "assets", profileName);
   if (!existsSync(assetsPath)) {
     mkdirSync(assetsPath, { recursive: true });
   }
   return assetsPath;
 }
 
-async function remoteFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
-    ...((init.headers as Record<string, string>) || {}),
-  };
-  return fetch(`${getApiUrl()}${path}`, { ...init, headers });
+const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"];
+const VIDEO_EXTS = ["mp4", "webm", "ogg", "mov", "avi", "m4v"];
+const OFFICE_EXTS = ["ppt", "pptx", "doc", "docx", "xls", "xlsx"];
+const PDF_EXT = "pdf";
+const MD_EXT = "md";
+
+function getFileExt(name: string): string {
+  return name.split(".").pop()?.toLowerCase() || "";
 }
 
-export async function listAssets(): Promise<Asset[]> {
-  const res = await remoteFetch("/api/assets");
-  if (!res.ok) {
-    throw new Error(`Failed to list assets: ${res.status}`);
-  }
-  const data = (await res.json()) as { assets: Asset[] };
-  return data.assets || [];
+function inferAssetType(name: string): "image" | "video" | "document" | "other" {
+  const ext = getFileExt(name);
+  if (IMAGE_EXTS.includes(ext)) return "image";
+  if (VIDEO_EXTS.includes(ext)) return "video";
+  if (OFFICE_EXTS.includes(ext) || ext === PDF_EXT || ext === MD_EXT) return "document";
+  return "other";
 }
 
-export async function getAsset(name: string): Promise<string> {
-  const encodedName = encodeURIComponent(name);
-  const res = await remoteFetch(`/api/assets/${encodedName}`);
-  if (!res.ok) {
-    throw new Error(`Failed to get asset: ${res.status}`);
+export async function listAssets(profile?: string): Promise<Asset[]> {
+  // Use local file system listing
+  const assetsPath = await getAssetsPath(profile);
+
+  try {
+    const files = readdirSync(assetsPath);
+
+    const assets: Asset[] = [];
+    for (const file of files) {
+      const filePath = join(assetsPath, file);
+      try {
+        const stat = statSync(filePath);
+        if (stat.isFile()) {
+          assets.push({
+            name: file,
+            source_path: filePath,
+            size: stat.size,
+            modified: Math.floor(stat.mtimeMs / 1000),
+            exists: true,
+            added_at: Math.floor(stat.ctimeMs / 1000),
+            type: inferAssetType(file),
+          });
+        }
+      } catch {
+        // Skip files we can't stat
+      }
+    }
+
+    return assets.sort((a, b) => b.added_at - a.added_at);
+  } catch {
+    return [];
   }
-  const blob = await res.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      // Remove data URL prefix if present
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error("Failed to read asset blob"));
-    reader.readAsDataURL(blob);
-  });
 }
 
-export async function removeAsset(name: string): Promise<boolean> {
-  const res = await remoteFetch("/api/assets/remove", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to remove asset: ${res.status}`);
+export async function getAsset(name: string, profile?: string): Promise<string> {
+  const assetsPath = await getAssetsPath(profile);
+  const filePath = join(assetsPath, name);
+
+  try {
+    const data = readFileSync(filePath);
+    return data.toString("base64");
+  } catch (err) {
+    throw new Error(`Failed to get asset: ${(err as Error).message}`);
   }
-  return true;
+}
+
+export async function removeAsset(name: string, profile?: string): Promise<boolean> {
+  const assetsPath = await getAssetsPath(profile);
+  const filePath = join(assetsPath, name);
+
+  try {
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
+    return true;
+  } catch (err) {
+    throw new Error(`Failed to remove asset: ${(err as Error).message}`);
+  }
 }
 
 export async function addAssetToChat(
   name: string,
   _sessionId: string,
+  profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const encodedName = encodeURIComponent(name);
-  const res = await remoteFetch(`/api/assets/${encodedName}`);
-  if (!res.ok) {
-    return { success: false, error: `Failed to fetch asset: ${res.status}` };
+  const assetsPath = await getAssetsPath(profile);
+  const filePath = join(assetsPath, name);
+
+  if (!existsSync(filePath)) {
+    return { success: false, error: "Asset not found" };
   }
-  // For now, just confirm the asset exists - actual chat integration
-  // would need to stage the file and add it as an attachment
   return { success: true };
 }
 
 export async function addAsset(
   name: string,
   base64Data: string,
+  profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const assetsPath = getAssetsPath();
-    const filePath = join(assetsPath, name);
+    const assetsPath = await getAssetsPath(profile);
+    // Sanitize filename: replace / with safe separator to avoid subdirectory creation
+    const safeName = name.replace(/\//g, " - ");
+    const filePath = join(assetsPath, safeName);
+    const parentDir = dirname(filePath);
+    if (parentDir !== assetsPath && !existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
+    }
 
     // Convert base64 to binary and save
     const binary = Buffer.from(base64Data, "base64");
     writeFileSync(filePath, binary);
-
     return { success: true };
   } catch (err) {
     return {

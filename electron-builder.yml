@@ -1,5 +1,6 @@
 appId: com.nousresearch.hermes
 productName: Hermes Agent
+afterPack: ./build/afterPack.js
 directories:
   buildResources: build
 files:
@@ -23,6 +24,9 @@ nsis:
 mac:
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
   icon: build/icon.icns
+  hardenedRuntime: false
+  sign: false
+  forceCodeSigning: false
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.

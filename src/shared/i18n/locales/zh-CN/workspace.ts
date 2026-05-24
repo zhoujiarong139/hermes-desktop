@@ -14,4 +14,5 @@ export default {
   resetZoom: "重置缩放",
   collapse: "收起",
   expand: "展开",
+  refresh: "刷新",
 } as const;

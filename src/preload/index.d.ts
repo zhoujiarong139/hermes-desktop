@@ -352,6 +352,7 @@ interface HermesAPI {
   listCachedSessions: (
     limit?: number,
     offset?: number,
+    profile?: string,
   ) => Promise<
     Array<{
       id: string;
@@ -362,7 +363,7 @@ interface HermesAPI {
       model: string;
     }>
   >;
-  syncSessionCache: () => Promise<
+  syncSessionCache: (profile?: string) => Promise<
     Array<{
       id: string;
       title: string;
@@ -372,7 +373,7 @@ interface HermesAPI {
       model: string;
     }>
   >;
-  updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
+  updateSessionTitle: (sessionId: string, title: string, profile?: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
 
   // Session search
@@ -650,7 +651,7 @@ interface HermesAPI {
   ) => Promise<{ content: string; path: string }>;
 
   // Assets
-  listAssets: () => Promise<
+  listAssets: (profile?: string) => Promise<
     Array<{
       name: string;
       source_path: string;
@@ -658,15 +659,41 @@ interface HermesAPI {
       modified: number;
       exists: boolean;
       added_at: number;
+      type?: "image" | "video" | "document" | "other";
+      prompt?: string;
+      model?: string;
+      dimensions?: { width: number; height: number };
+      duration?: number;
+      thumbnail?: string;
     }>
   >;
-  getAsset: (name: string) => Promise<string>;
-  removeAsset: (name: string) => Promise<boolean>;
+  getAsset: (name: string, profile?: string) => Promise<string>;
+  removeAsset: (name: string, profile?: string) => Promise<boolean>;
   addAssetToChat: (
     name: string,
     sessionId: string,
+    profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  addAsset: (name: string, base64Data: string) => Promise<{ success: boolean; error?: string }>;
+  addAsset: (name: string, base64Data: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Asset social
+  getAssetSocial: (name: string, profile?: string) => Promise<{
+    likes: string[];
+    comments: Array<{ id: string; author: string; body: string; created_at: number }>;
+    shares: number;
+  }>;
+  toggleAssetLike: (name: string, userId: string, profile?: string) => Promise<{ liked: boolean; count: number }>;
+  getAssetComments: (name: string, profile?: string) => Promise<
+    Array<{ id: string; author: string; body: string; created_at: number }>
+  >;
+  addAssetComment: (
+    name: string,
+    author: string,
+    body: string,
+    profile?: string,
+  ) => Promise<{ id: string; author: string; body: string; created_at: number }>;
+  deleteAssetComment: (name: string, commentId: string, profile?: string) => Promise<boolean>;
+  incrementAssetShare: (name: string, profile?: string) => Promise<number>;
 
   // Workspace
   listWorkspaceDocuments: () => Promise<
@@ -677,6 +704,8 @@ interface HermesAPI {
       size: number;
       createdAt: number;
       path: string;
+      base64Data?: string;
+      isExternal?: boolean;
     }>
   >;
   saveWorkspaceDocument: (
@@ -686,6 +715,7 @@ interface HermesAPI {
   getWorkspaceDocument: (name: string) => Promise<string | null>;
   openWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
   deleteWorkspaceDocument: (name: string) => Promise<{ success: boolean; error?: string }>;
+  deleteExternalFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   onWorkspaceChanged: (callback: () => void) => () => void;
 }
 

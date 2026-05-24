@@ -26,6 +26,8 @@ export interface ChatInputHandle {
   focus(): void;
   /** Add files from external sources (drop overlay).  Returns errors. */
   addFiles(files: File[] | FileList): Promise<AttachmentError[]>;
+  /** Exposed for parent (Layout) to inject workspace documents as attachments */
+  addFilesFromBase64(base64Data: string, filename: string): Promise<void>;
 }
 
 interface ChatInputProps {
@@ -154,6 +156,36 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         },
         addFiles(files: File[] | FileList): Promise<AttachmentError[]> {
           return ingestFiles(files);
+        },
+        addFilesFromBase64(base64Data: string, filename: string): Promise<void> {
+          void base64Data; void filename;
+          // Decode base64 → binary → Blob → File (browser File API)
+          const binary = atob(base64Data);
+          const len = binary.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+          // Infer MIME type from extension
+          const ext = filename.split(".").pop()?.toLowerCase() || "";
+          const MIME_MAP: Record<string, string> = {
+            png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+            gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+            bmp: "image/bmp", ico: "image/x-icon",
+            mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg",
+            mov: "video/quicktime", avi: "video/x-msvideo", m4v: "video/x-m4v",
+            pdf: "application/pdf",
+            doc: "application/msword",
+            docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            xls: "application/vnd.ms-excel",
+            xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ppt: "application/vnd.ms-powerpoint",
+            pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            html: "text/html", htm: "text/html",
+            md: "text/markdown", txt: "text/plain", json: "application/json",
+          };
+          const mime = MIME_MAP[ext] || "application/octet-stream";
+          const blob = new Blob([bytes], { type: mime });
+          const file = new File([blob], filename, { type: mime });
+          return ingestFiles([file]).then(() => { /* no-op */ });
         },
       }),
       [autoResize, ingestFiles],

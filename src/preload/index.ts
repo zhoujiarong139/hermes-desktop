@@ -811,7 +811,7 @@ const hermesAPI = {
     ipcRenderer.invoke("read-logs", logFile, lines),
 
   // Assets
-  listAssets: (): Promise<
+  listAssets: (profile?: string): Promise<
     Array<{
       name: string;
       source_path: string;
@@ -820,24 +820,47 @@ const hermesAPI = {
       exists: boolean;
       added_at: number;
     }>
-  > => ipcRenderer.invoke("list-assets"),
+  > => ipcRenderer.invoke("list-assets", profile),
 
-  getAsset: (name: string): Promise<string> =>
-    ipcRenderer.invoke("get-asset", name),
+  getAsset: (name: string, profile?: string): Promise<string> =>
+    ipcRenderer.invoke("get-asset", name, profile),
 
-  removeAsset: (name: string): Promise<boolean> =>
-    ipcRenderer.invoke("remove-asset", name),
+  removeAsset: (name: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-asset", name, profile),
 
   addAssetToChat: (
     name: string,
     sessionId: string,
+    profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("add-asset-to-chat", name, sessionId),
+    ipcRenderer.invoke("add-asset-to-chat", name, sessionId, profile),
 
-  addAsset: (name: string, base64Data: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("add-asset", name, base64Data),
+  addAsset: (name: string, base64Data: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("add-asset", name, base64Data, profile),
+
+  // Asset social
+  getAssetSocial: (name: string, profile?: string): Promise<{ likes: string[]; comments: Array<{ id: string; author: string; body: string; created_at: number }>; shares: number }> =>
+    ipcRenderer.invoke("get-asset-social", name, profile),
+
+  toggleAssetLike: (name: string, userId: string, profile?: string): Promise<{ liked: boolean; count: number }> =>
+    ipcRenderer.invoke("toggle-asset-like", name, userId, profile),
+
+  getAssetComments: (name: string, profile?: string): Promise<Array<{ id: string; author: string; body: string; created_at: number }>> =>
+    ipcRenderer.invoke("get-asset-comments", name, profile),
+
+  addAssetComment: (name: string, author: string, body: string, profile?: string): Promise<{ id: string; author: string; body: string; created_at: number }> =>
+    ipcRenderer.invoke("add-asset-comment", name, author, body, profile),
+
+  deleteAssetComment: (name: string, commentId: string, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("delete-asset-comment", name, commentId, profile),
+
+  incrementAssetShare: (name: string, profile?: string): Promise<number> =>
+    ipcRenderer.invoke("increment-asset-share", name, profile),
 
   // Workspace
+  debugMonitoredDirs: (): Promise<string[]> =>
+    ipcRenderer.invoke("debug-monitored-dirs"),
+
   listWorkspaceDocuments: (): Promise<
     Array<{
       id: string;
