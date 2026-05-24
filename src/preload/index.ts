@@ -838,6 +838,32 @@ const hermesAPI = {
   addAsset: (name: string, base64Data: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("add-asset", name, base64Data, profile),
 
+  // Asset folder management
+  listAssetNodes: (folder: string | undefined, profile?: string): Promise<
+    Array<{
+      name: string;
+      path: string;
+      type: "file" | "folder";
+      size?: number;
+      modified: number;
+      exists: boolean;
+      added_at: number;
+      type_?: "image" | "video" | "document" | "other";
+    }>
+  > => ipcRenderer.invoke("list-asset-nodes", folder, profile),
+
+  createAssetFolder: (name: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("create-asset-folder", name, profile),
+
+  moveAsset: (fromPath: string, toPath: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("move-asset", fromPath, toPath, profile),
+
+  copyAsset: (fromPath: string, toPath: string, profile?: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("copy-asset", fromPath, toPath, profile),
+
+  uploadAssetFile: (sourcePath: string, targetFolder: string, profile?: string): Promise<{ success: boolean; error?: string; name?: string }> =>
+    ipcRenderer.invoke("upload-asset-file", sourcePath, targetFolder, profile),
+
   // Asset social
   getAssetSocial: (name: string, profile?: string): Promise<{ likes: string[]; comments: Array<{ id: string; author: string; body: string; created_at: number }>; shares: number }> =>
     ipcRenderer.invoke("get-asset-social", name, profile),

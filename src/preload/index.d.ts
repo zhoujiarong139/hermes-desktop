@@ -676,6 +676,24 @@ interface HermesAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   addAsset: (name: string, base64Data: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
 
+  // Asset folder management
+  listAssetNodes: (folder: string | undefined, profile?: string) => Promise<
+    Array<{
+      name: string;
+      path: string;
+      type: "file" | "folder";
+      size?: number;
+      modified: number;
+      exists: boolean;
+      added_at: number;
+      type_?: "image" | "video" | "document" | "other";
+    }>
+  >;
+  createAssetFolder: (name: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
+  moveAsset: (fromPath: string, toPath: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
+  copyAsset: (fromPath: string, toPath: string, profile?: string) => Promise<{ success: boolean; error?: string }>;
+  uploadAssetFile: (sourcePath: string, targetFolder: string, profile?: string) => Promise<{ success: boolean; error?: string; name?: string }>;
+
   // Asset social
   getAssetSocial: (name: string, profile?: string) => Promise<{
     likes: string[];

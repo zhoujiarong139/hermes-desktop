@@ -1,6 +1,6 @@
 import { app } from "electron";
-import { join, dirname } from "path";
-import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, unlinkSync } from "fs";
+import { join, dirname, basename } from "path";
+import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, readFileSync, unlinkSync, copyFileSync, renameSync } from "fs";
 import { getActiveProfileName } from "./profiles";
 
 interface Asset {
@@ -122,7 +122,7 @@ export async function addAsset(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const assetsPath = await getAssetsPath(profile);
-    // Sanitize filename: replace / with safe separator to avoid subdirectory creation
+    // Support subfolder paths like "subfolder/file.png"
     const safeName = name.replace(/\//g, " - ");
     const filePath = join(assetsPath, safeName);
     const parentDir = dirname(filePath);
@@ -138,6 +138,163 @@ export async function addAsset(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to add asset",
+    };
+  }
+}
+
+// ── Folders ──────────────────────────────────────────────────────────────────
+
+export interface AssetFolder {
+  name: string;
+  path: string; // relative to assets root, e.g. "subfolder" or "a/b"
+  fileCount: number;
+}
+
+export interface AssetNode {
+  name: string;
+  path: string; // full relative path from assets root
+  type: "file" | "folder";
+  size?: number;
+  modified: number;
+  exists: boolean;
+  added_at: number;
+  type_?: "image" | "video" | "document" | "other";
+}
+
+export async function listAssetNodes(
+  folder?: string,
+  profile?: string,
+): Promise<AssetNode[]> {
+  const assetsPath = await getAssetsPath(profile);
+  const baseDir = folder ? join(assetsPath, folder) : assetsPath;
+
+  if (!existsSync(baseDir)) return [];
+
+  try {
+    const entries = readdirSync(baseDir, { withFileTypes: true });
+    return entries.map((entry) => {
+      const relPath = folder ? `${folder}/${entry.name}` : entry.name;
+      const fullPath = join(baseDir, entry.name);
+      const stat = statSync(fullPath);
+      if (entry.isDirectory()) {
+        return {
+          name: entry.name,
+          path: relPath,
+          type: "folder" as const,
+          modified: Math.floor(stat.mtimeMs / 1000),
+          exists: true,
+          added_at: Math.floor(stat.ctimeMs / 1000),
+        };
+      }
+      return {
+        name: entry.name,
+        path: relPath,
+        type: "file" as const,
+        size: stat.size,
+        modified: Math.floor(stat.mtimeMs / 1000),
+        exists: true,
+        added_at: Math.floor(stat.ctimeMs / 1000),
+        type_: inferAssetType(entry.name),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function createAssetFolder(
+  name: string,
+  profile?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const assetsPath = await getAssetsPath(profile);
+    const folderPath = join(assetsPath, name);
+    if (existsSync(folderPath)) {
+      return { success: false, error: "Folder already exists" };
+    }
+    mkdirSync(folderPath, { recursive: true });
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create folder",
+    };
+  }
+}
+
+export async function moveAsset(
+  fromPath: string,
+  toPath: string,
+  profile?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const assetsPath = await getAssetsPath(profile);
+    const src = join(assetsPath, fromPath);
+    const dst = join(assetsPath, toPath);
+    if (!existsSync(src)) {
+      return { success: false, error: "Source not found" };
+    }
+    const dstDir = dirname(dst);
+    if (!existsSync(dstDir)) {
+      mkdirSync(dstDir, { recursive: true });
+    }
+    renameSync(src, dst);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to move asset",
+    };
+  }
+}
+
+export async function copyAsset(
+  fromPath: string,
+  toPath: string,
+  profile?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const assetsPath = await getAssetsPath(profile);
+    const src = join(assetsPath, fromPath);
+    const dst = join(assetsPath, toPath);
+    if (!existsSync(src)) {
+      return { success: false, error: "Source not found" };
+    }
+    const dstDir = dirname(dst);
+    if (!existsSync(dstDir)) {
+      mkdirSync(dstDir, { recursive: true });
+    }
+    copyFileSync(src, dst);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to copy asset",
+    };
+  }
+}
+
+export async function uploadAssetFile(
+  sourcePath: string,
+  targetFolder: string,
+  profile?: string,
+): Promise<{ success: boolean; error?: string; name?: string }> {
+  try {
+    const assetsPath = await getAssetsPath(profile);
+    const fileName = basename(sourcePath);
+    const targetDir = targetFolder
+      ? join(assetsPath, targetFolder)
+      : assetsPath;
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+    const destPath = join(targetDir, fileName);
+    copyFileSync(sourcePath, destPath);
+    return { success: true, name: targetFolder ? `${targetFolder}/${fileName}` : fileName };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to upload file",
     };
   }
 }

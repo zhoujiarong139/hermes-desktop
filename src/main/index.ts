@@ -125,7 +125,7 @@ import {
   resumeCronJob,
   triggerCronJob,
 } from "./cronjobs";
-import { listAssets, getAsset, removeAsset, addAssetToChat, addAsset } from "./assets";
+import { listAssets, getAsset, removeAsset, addAssetToChat, addAsset, listAssetNodes, createAssetFolder, moveAsset, copyAsset, uploadAssetFile } from "./assets";
 import {
   getAssetSocial,
   toggleAssetLike,
@@ -1287,6 +1287,23 @@ function setupIPC(): void {
 
   ipcMain.handle("add-asset", (_event, name: string, base64Data: string, profile?: string) => {
     return addAsset(name, base64Data, profile);
+  });
+
+  // Asset folder management
+  ipcMain.handle("list-asset-nodes", (_event, folder: string | undefined, profile?: string) => {
+    return listAssetNodes(folder, profile);
+  });
+  ipcMain.handle("create-asset-folder", (_event, name: string, profile?: string) => {
+    return createAssetFolder(name, profile);
+  });
+  ipcMain.handle("move-asset", (_event, fromPath: string, toPath: string, profile?: string) => {
+    return moveAsset(fromPath, toPath, profile);
+  });
+  ipcMain.handle("copy-asset", (_event, fromPath: string, toPath: string, profile?: string) => {
+    return copyAsset(fromPath, toPath, profile);
+  });
+  ipcMain.handle("upload-asset-file", (_event, sourcePath: string, targetFolder: string, profile?: string) => {
+    return uploadAssetFile(sourcePath, targetFolder, profile);
   });
 
   // Asset social features
