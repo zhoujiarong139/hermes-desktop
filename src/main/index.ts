@@ -733,15 +733,26 @@ function setupIPC(): void {
   });
 
   // Attachment staging — for pasted blobs that have no filesystem origin.
+  // profile param ensures the staging dir matches the active profile so the
+  // gateway agent (running in that profile) can always find the staged file.
   ipcMain.handle(
     "stage-attachment",
-    (_event, sessionId: string, filename: string, base64Bytes: string) => {
-      return stageAttachment(sessionId, filename, base64Bytes);
+    (
+      _event,
+      sessionId: string,
+      filename: string,
+      base64Bytes: string,
+      profile?: string,
+    ) => {
+      return stageAttachment(sessionId, filename, base64Bytes, profile);
     },
   );
-  ipcMain.handle("clear-staged-attachments", (_event, sessionId: string) => {
-    clearStagedAttachments(sessionId);
-  });
+  ipcMain.handle(
+    "clear-staged-attachments",
+    (_event, sessionId: string, profile?: string) => {
+      clearStagedAttachments(sessionId, profile);
+    },
+  );
 
   // Gateway
   ipcMain.handle("start-gateway", async () => {
@@ -806,9 +817,13 @@ function setupIPC(): void {
     return getSessionMessages(sessionId);
   });
 
-  ipcMain.handle("delete-session", (_event, sessionId: string) => {
-    return deleteSession(sessionId);
-  });
+  ipcMain.handle(
+    "delete-session",
+    (_event, sessionId: string, profile?: string) => {
+      clearStagedAttachments(sessionId, profile);
+      return deleteSession(sessionId);
+    },
+  );
 
   // Profiles
   ipcMain.handle("list-profiles", async () => {
@@ -833,6 +848,12 @@ function setupIPC(): void {
     if (getConnectionConfig().mode !== "ssh") setActiveProfile(name);
     // Restart workspace file watcher for the new profile
     await restartExternalFileWatcher();
+    // Restart local gateway so it loads the new profile's config/API keys.
+    // Skip for SSH mode (gateway runs on remote host) and remote mode
+    // (no local gateway needed).
+    if (!isRemoteMode()) {
+      restartGateway(name);
+    }
     // Notify renderer to refresh workspace
     // Use setTimeout to ensure profile state is fully flushed before notification
     setTimeout(() => {

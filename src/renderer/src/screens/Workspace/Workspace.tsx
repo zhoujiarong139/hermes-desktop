@@ -203,8 +203,9 @@ export function Workspace({
       ]);
       setDocuments(list);
       setCurrentPage(1);
-      // Derive favorited state from which docs already exist in assets (match by doc.name)
-      const assetNames = new Set(assetsList.map((a: { name: string }) => a.name));
+      // Derive favorited state from which docs already exist in assets (match by doc.name).
+      // Asset names have '/' replaced with ' - ' (safeName), so normalize both sides.
+      const assetNames = new Set(assetsList.map((a: { name: string }) => a.name.replace(/\//g, " - ")));
       setFavoritedIds(new Set(list.filter((d: WorkspaceDocument) => assetNames.has(d.name)).map((d: WorkspaceDocument) => d.id)));
     } catch (err) {
       console.error("Failed to load workspace documents:", err);

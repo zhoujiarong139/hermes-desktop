@@ -27,6 +27,14 @@ export interface ProcessFilesOptions {
   // remote-URL mode).  Path-ref attachments require the file path to
   // exist on the same host as the agent, so binaries are blocked.
   remoteMode?: boolean;
+  // Active profile name — used to scope the staging directory so the
+  // gateway agent (running in the same profile) can always find the file.
+  profile?: string;
+  // When true, skip MIME-type classification and treat every file as
+  // path-ref (staging if needed).  Used by the workspace "send to chat"
+  // path where we want the agent to read the file via [Attached file: <path>]
+  // rather than inline <file>…</file> text which the agent cannot parse.
+  forcePathRef?: boolean;
 }
 
 function newId(): string {
@@ -125,7 +133,11 @@ export async function processFiles(
       continue;
     }
 
-    if (isTextFile(mime, name)) {
+    // When forcePathRef is set, skip inline text-file classification and
+    // go straight to path-ref.  This makes workspace "send to chat" files
+    // emit [Attached file: <abs-path>] instead of <file>…</file>, which
+    // the agent CAN parse (it has file-reading tools that handle paths).
+    if (isTextFile(mime, name) && !options.forcePathRef) {
       if (file.size > MAX_TEXT_BYTES) {
         errors.push({ code: "text-too-large", filename: name });
         continue;
@@ -173,6 +185,7 @@ export async function processFiles(
           options.sessionId || "",
           name,
           base64,
+          options.profile,
         );
       } catch (err) {
         errors.push({

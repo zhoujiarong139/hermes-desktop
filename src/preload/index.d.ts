@@ -204,8 +204,9 @@ interface HermesAPI {
     sessionId: string,
     filename: string,
     base64Bytes: string,
+    profile?: string,
   ) => Promise<string>;
-  clearStagedAttachments: (sessionId: string) => Promise<void>;
+  clearStagedAttachments: (sessionId: string, profile?: string) => Promise<void>;
   onChatChunk: (callback: (chunk: string) => void) => () => void;
   onChatDone: (callback: (sessionId?: string) => void) => () => void;
   onChatToolProgress: (callback: (tool: string) => void) => () => void;
@@ -374,7 +375,7 @@ interface HermesAPI {
     }>
   >;
   updateSessionTitle: (sessionId: string, title: string, profile?: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string, profile?: string) => Promise<void>;
 
   // Session search
   searchSessions: (

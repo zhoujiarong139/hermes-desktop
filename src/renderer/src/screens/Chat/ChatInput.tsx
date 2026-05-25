@@ -35,6 +35,9 @@ interface ChatInputProps {
   hasSession: boolean;
   sessionId?: string | null;
   remoteMode?: boolean;
+  /** Active profile name, forwarded to stageAttachment so the staging dir
+   *  matches the gateway's profile. */
+  profile?: string;
   onSubmit: (text: string, attachments: Attachment[]) => void;
   onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
@@ -47,6 +50,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       hasSession,
       sessionId,
       remoteMode,
+      profile,
       onSubmit,
       onQuickAsk,
       onAbort,
@@ -117,6 +121,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           {
             sessionId: sessionId || undefined,
             remoteMode: !!remoteMode,
+            profile,
           },
         );
         if (added.length > 0) {
@@ -129,7 +134,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
         return errors;
       },
-      [attachments.length, formatError, sessionId, remoteMode],
+      [attachments.length, formatError, profile, sessionId, remoteMode],
     );
 
     useImperativeHandle(
@@ -158,37 +163,50 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           return ingestFiles(files);
         },
         addFilesFromBase64(base64Data: string, filename: string): Promise<void> {
-          void base64Data; void filename;
-          // Decode base64 → binary → Blob → File (browser File API)
-          const binary = atob(base64Data);
-          const len = binary.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
-          // Infer MIME type from extension
-          const ext = filename.split(".").pop()?.toLowerCase() || "";
-          const MIME_MAP: Record<string, string> = {
-            png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
-            gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
-            bmp: "image/bmp", ico: "image/x-icon",
-            mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg",
-            mov: "video/quicktime", avi: "video/x-msvideo", m4v: "video/x-m4v",
-            pdf: "application/pdf",
-            doc: "application/msword",
-            docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            xls: "application/vnd.ms-excel",
-            xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            ppt: "application/vnd.ms-powerpoint",
-            pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            html: "text/html", htm: "text/html",
-            md: "text/markdown", txt: "text/plain", json: "application/json",
-          };
-          const mime = MIME_MAP[ext] || "application/octet-stream";
-          const blob = new Blob([bytes], { type: mime });
-          const file = new File([blob], filename, { type: mime });
-          return ingestFiles([file]).then(() => { /* no-op */ });
+          // Stage the file to the profile-scoped staging dir, then create
+          // a path-ref attachment so the gateway emits
+          //   [Attached file: <abs-path>]
+          // which the agent CAN parse via its file-reading tools.
+          // We bypass processFiles' text-file classification (which would
+          // emit <file>…</file> inline text that the agent ignores).
+          return window.hermesAPI
+            .stageAttachment(sessionId || "", filename, base64Data, profile)
+            .then((path) => {
+              const ext = filename.split(".").pop()?.toLowerCase() || "";
+              const MIME_MAP: Record<string, string> = {
+                png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+                gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+                bmp: "image/bmp", ico: "image/x-icon",
+                mp4: "video/mp4", webm: "video/webm", ogg: "video/ogg",
+                mov: "video/quicktime", avi: "video/x-msvideo", m4v: "video/x-m4v",
+                pdf: "application/pdf",
+                doc: "application/msword",
+                docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                xls: "application/vnd.ms-excel",
+                xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ppt: "application/vnd.ms-powerpoint",
+                pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                html: "text/html", htm: "text/html",
+                md: "text/markdown", txt: "text/plain", json: "application/json",
+              };
+              const mime = MIME_MAP[ext] || "application/octet-stream";
+              const byteCount = Math.floor(base64Data.length * 0.75);
+              const newAttachment: Attachment = {
+                id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                kind: "path-ref",
+                name: filename,
+                mime,
+                size: byteCount,
+                path,
+              };
+              setAttachments((prev) => [...prev, newAttachment]);
+            })
+            .catch(() => {
+              // best-effort — no attachment chip shown on failure
+            });
         },
       }),
-      [autoResize, ingestFiles],
+      [autoResize, ingestFiles, profile, sessionId],
     );
 
     // Refocus the textarea when a streaming response ends

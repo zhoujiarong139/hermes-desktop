@@ -205,11 +205,12 @@ const hermesAPI = {
     sessionId: string,
     filename: string,
     base64Bytes: string,
+    profile?: string,
   ): Promise<string> =>
-    ipcRenderer.invoke("stage-attachment", sessionId, filename, base64Bytes),
+    ipcRenderer.invoke("stage-attachment", sessionId, filename, base64Bytes, profile),
 
-  clearStagedAttachments: (sessionId: string): Promise<void> =>
-    ipcRenderer.invoke("clear-staged-attachments", sessionId),
+  clearStagedAttachments: (sessionId: string, profile?: string): Promise<void> =>
+    ipcRenderer.invoke("clear-staged-attachments", sessionId, profile),
 
   onChatChunk: (callback: (chunk: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, chunk: string): void =>
@@ -445,8 +446,8 @@ const hermesAPI = {
 
   updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
     ipcRenderer.invoke("update-session-title", sessionId, title),
-  deleteSession: (sessionId: string): Promise<void> =>
-    ipcRenderer.invoke("delete-session", sessionId),
+  deleteSession: (sessionId: string, profile?: string): Promise<void> =>
+    ipcRenderer.invoke("delete-session", sessionId, profile),
 
   // Session search
   searchSessions: (

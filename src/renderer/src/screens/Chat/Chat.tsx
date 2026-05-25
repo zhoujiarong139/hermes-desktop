@@ -236,6 +236,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(
           hasSession={!!hermesSessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
+          profile={profile}
           onSubmit={actions.handleSend}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}

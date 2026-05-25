@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
-import { HERMES_HOME } from "./installer";
+import { profilePaths } from "./utils";
 
 /**
  * Staging area for pasted attachments.  Picker / drag-drop attachments
@@ -9,13 +9,18 @@ import { HERMES_HOME } from "./installer";
  * agent.
  *
  * Layout:
- *   %LOCALAPPDATA%/hermes/desktop-staging/<sessionId>/<filename>
+ *   <profile_home>/desktop-staging/<sessionId>/
  *
  * Files persist across desktop restarts so the agent can re-read them
  * on session resume.  Per-session subdirs are cleaned up when the
  * session is deleted.
+ *
+ * The staging root is resolved per-profile so that the active profile's
+ * gateway can always find the files it needs.
  */
-const STAGING_ROOT = join(HERMES_HOME, "desktop-staging");
+function getStagingRoot(profile?: string): string {
+  return join(profilePaths(profile).home, "desktop-staging");
+}
 
 function sanitizeSegment(value: string, fallback: string): string {
   // Strip path separators, null bytes, and any other dodgy chars; collapse
@@ -54,9 +59,10 @@ export function stageAttachment(
   sessionId: string,
   filename: string,
   base64Bytes: string,
+  profile?: string,
 ): string {
   const sessionSegment = sanitizeSegment(sessionId || "default", "default");
-  const dir = join(STAGING_ROOT, sessionSegment);
+  const dir = join(getStagingRoot(profile), sessionSegment);
   mkdirSync(dir, { recursive: true });
   const target = uniquePath(dir, filename);
   writeFileSync(target, Buffer.from(base64Bytes, "base64"));
@@ -67,11 +73,11 @@ export function stageAttachment(
  * Remove an entire session's staging directory.  Called when a chat
  * session is deleted from the UI.
  */
-export function clearStagedAttachments(sessionId: string): void {
+export function clearStagedAttachments(sessionId: string, profile?: string): void {
   if (!sessionId) return;
   const sessionSegment = sanitizeSegment(sessionId, "");
   if (!sessionSegment) return;
-  const dir = join(STAGING_ROOT, sessionSegment);
+  const dir = join(getStagingRoot(profile), sessionSegment);
   if (existsSync(dir)) {
     try {
       rmSync(dir, { recursive: true, force: true });
